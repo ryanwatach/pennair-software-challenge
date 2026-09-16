@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: pennair-vision
+Version: 1.0.0
+Summary: Streams video and detects solid shapes on textured backgrounds.
+Maintainer: Ryan Watach
+Maintainer-email: watachryan@gmail.com
+License: MIT

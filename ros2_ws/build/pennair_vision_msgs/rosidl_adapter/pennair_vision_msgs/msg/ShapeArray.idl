@@ -1,0 +1,28 @@
+// generated from rosidl_adapter/resource/msg.idl.em
+// with input from pennair_vision_msgs/msg/ShapeArray.msg
+// generated code does not contain a copyright notice
+
+#include "pennair_vision_msgs/msg/Shape.idl"
+#include "std_msgs/msg/Header.idl"
+
+module pennair_vision_msgs {
+  module msg {
+    @verbatim (language="comment", text=
+      "All shapes found in one frame.")
+    struct ShapeArray {
+      @verbatim (language="comment", text=
+        "stamp/frame_id copied from the source image")
+      std_msgs::msg::Header header;
+
+      sequence<pennair_vision_msgs::msg::Shape> shapes;
+
+      @verbatim (language="comment", text=
+        "scene depth used for the 3D centers")
+      double depth_inches;
+
+      @verbatim (language="comment", text=
+        "false before the circle has ever been seen")
+      boolean depth_valid;
+    };
+  };
+};

@@ -279,10 +279,71 @@ which rejects those occlusion spikes and keeps a depth available on the 34% of
 frames where the circle has drifted out of shot. Clipped circles are refused as
 references for the same reason.
 
+## Part 5 — ROS 2
+
+ROS 2 Jazzy, containerised so it runs anywhere (macOS included) without an
+Ubuntu VM.
+
+```bash
+./ros2_ws/run_docker.sh            # build image + workspace, then launch
+./ros2_ws/run_docker.sh video:=/workspace/assets/'PennAir 2024 App Dynamic Hard.mp4'
+./ros2_ws/run_docker.sh shell      # interactive shell in the container
+```
+
+### Graph
+
+```
+video_publisher ──/camera/image_raw──▶ shape_detector ──┬──▶ /camera/shapes
+ (streams the clip                                      │    (ShapeArray:
+  one frame per tick)                                   │     label, area, centre
+                                                        │     in px AND in inches,
+                                                        │     traced outline)
+                                                        └──▶ /camera/image_annotated
+                                                             (for rviz / rqt)
+```
+
+| Package | Build type | Contents |
+|---|---|---|
+| `pennair_vision_msgs` | `ament_cmake` | `Shape.msg`, `ShapeArray.msg` |
+| `pennair_vision` | `ament_python` | both nodes, launch file |
+
+Two packages because `ament_python` cannot generate messages — interface
+generation needs `ament_cmake`, so the messages live in their own package.
+
+The detector node **imports `src/detector.py` directly** rather than carrying a
+copy, so the ROS graph and the standalone scripts run literally the same
+algorithm with no second implementation to drift. The repo is mounted at
+`/workspace` and `PYTHONPATH` points at `src/`.
+
+`video_publisher` reads one frame per timer tick, keeping the streaming
+discipline of Part 2: nothing is decoded ahead of time, so the graph sees what
+real hardware would deliver.
+
+### Verified running
+
+```
+$ ros2 topic list
+/camera/image_annotated
+/camera/image_raw
+/camera/shapes
+
+$ ros2 topic type /camera/shapes
+pennair_vision_msgs/msg/ShapeArray
+
+$ ros2 topic hz /camera/shapes
+average rate: 30.729          # source clip is 30.3 fps -> keeping up
+```
+
+The detector holds the publisher's rate with no backlog, and reports the same
+depth (252.2 in) as the standalone Part 4 script — the same algorithm, reached
+through ROS. `output/part5_ros2_topic_frame.png` was captured off
+`/camera/image_annotated` as proof the graph really carries the data.
+
 ## Layout
 
 ```
 assets/   input image / video
+ros2_ws/  ROS 2 workspace + Dockerfile
 src/      detector.py (core algorithm), camera.py (pinhole model)
           part1_static.py, part2_video.py, part4_3d.py
 output/   generated annotations

@@ -1,0 +1,1 @@
+/workspace/ros2_ws/build/pennair_vision_msgs/ament_cmake_environment_hooks/pythonpath.sh
