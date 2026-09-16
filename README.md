@@ -208,10 +208,82 @@ correct — shapes genuinely leave the frame as the camera pans.
 - **Occlusion.** When shapes overlap, the visible region is not the shape, so the
   polygon label and the centroid both shift. Addressed in Part 6 with tracking.
 
+## Part 4 — 3D coordinates
+
+```bash
+python src/part4_3d.py                                    # video
+python src/part4_3d.py --image "assets/PennAir 2024 App Static.png" \
+                       --out output/part4_static_3d.png   # single image
+python src/part4_3d.py --literal-principal-point           # use K verbatim
+```
+
+Each center is reported as (X, Y, Z) in inches in the camera frame, using
+OpenCV's convention: +X right, +Y **down**, +Z forward along the optical axis.
+
+### Getting scale from the circle
+
+A circle of radius R at depth Z projects to an ellipse of semi-axes
+(fx·R/Z, fy·R/Z), so it covers `pi·fx·fy·R²/Z²` pixels. Solving for depth:
+
+```
+Z = R · sqrt(pi · fx · fy / area_px)
+```
+
+Area is used rather than a measured radius because it integrates over every
+pixel of the blob, so a few ragged boundary pixels barely move the estimate,
+whereas a single radius measurement is at their mercy.
+
+With the circle fixing Z and the challenge's flat-surface assumption, every
+shape lies on one plane and therefore shares that depth. X and Y then follow by
+backprojection.
+
+### Two judgement calls
+
+**The resolution K belongs to.** Focal lengths are in pixels, so they are tied
+to the resolution they were calibrated at, and the static image (960×540) is
+half the video's size. Read against 1920×1080 this K implies a 41.0° × 23.7°
+field of view — an ordinary camera. Read against 960×540 it implies 21.2° ×
+12.0°, an improbable telephoto. So K belongs to the video resolution and is
+rescaled for any other frame size. Skipping this would put the static image's
+depth out by exactly 2×.
+
+**The principal point.** The supplied K has `cx = cy = 0`, which places the
+optical axis at the top-left *corner* of the sensor. No real camera is built
+that way — the principal point lands near the image center, and a calibration
+returning (0,0) for a 1920×1080 frame would be rejected as broken. It reads as a
+placeholder rather than a measured value, so the image center is substituted by
+default, which is the standard assumption for an uncalibrated principal point.
+This shifts the origin of X and Y only; **depth is unaffected either way**. Pass
+`--literal-principal-point` to use K exactly as written, which measures X and Y
+from the ray through pixel (0,0) instead of from the optical axis.
+
+### Does the flat-surface assumption hold?
+
+It is worth checking rather than assuming. Estimating depth independently on
+every frame where the circle is fully visible (1214 of 1837 frames):
+
+| | inches |
+|---|---|
+| median depth | 252.2 (21.0 ft) |
+| standard deviation | 1.66 |
+| spread | 0.66% of mean |
+
+Constant to within a percent, so the assumption holds. The residual spread is
+almost entirely 10 frames (0.82%) where the circle is partly occluded: less
+visible area reads as a smaller circle and therefore a falsely *larger* depth,
+up to 300 in. Excluding those, the spread drops to **0.19%**.
+
+Since the true depth is near-constant, the circle is treated as a calibration
+source rather than a per-frame measurement: its estimates feed a running median,
+which rejects those occlusion spikes and keeps a depth available on the 34% of
+frames where the circle has drifted out of shot. Clipped circles are refused as
+references for the same reason.
+
 ## Layout
 
 ```
 assets/   input image / video
-src/      detector.py (core algorithm), part1_static.py, part2_video.py
+src/      detector.py (core algorithm), camera.py (pinhole model)
+          part1_static.py, part2_video.py, part4_3d.py
 output/   generated annotations
 ```
