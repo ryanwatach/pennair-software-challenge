@@ -106,6 +106,108 @@ Comfortably real-time. Three changes got it there from an initial 10-20 fps:
   polygon, so naming it from its vertex count is meaningless. These are detected,
   outlined and centred as normal but labelled `shape (clipped)`.
 
+## Part 3 — Background agnostic
+
+```bash
+python src/part2_video.py \
+    --video "assets/PennAir 2024 App Dynamic Hard.mp4" \
+    --out   output/part3_hard_annotated.mp4
+```
+
+**Same script, same parameters, no tuning.** The only thing that changes is the
+input path. That is the claim of background agnosticism, stated as plainly as it
+can be made.
+
+The hard clip swaps grass for asphalt and gives every shape a colour gradient
+(magenta->green, blue->yellow, red->yellow). It broke the detector in two
+separate places.
+
+### Problem 1: local standard deviation cannot see gradients
+
+Probing pixel values explained the failure immediately:
+
+| Region | local std |
+|---|---|
+| asphalt background | 11.67 |
+| rectangle, magenta end | 11.83 |
+| triangle (gradient) | 11.42 |
+| trapezoid | 11.50 |
+| rectangle, flat green end | 0.00 |
+
+The gradient fills are *exactly as variable* as the asphalt, so only the flat
+parts of shapes survived — outlines covered half a circle, half a pentagon, and
+the triangle vanished entirely.
+
+Magnitude of variation is the wrong question. The right one is whether a region
+varies **smoothly or randomly**, and that is what a second derivative answers: a
+linear ramp differentiates to exactly zero, while random grain does not. So the
+busyness metric became the local mean of `|Laplacian|`.
+
+Scored against a hand-built ground-truth mask (Youden's J, higher is better):
+
+| Metric | J |
+|---|---|
+| local std (old) | 0.571 |
+| high-pass `\|I-G(σ=1)\|` | 0.986 |
+| **local mean of `\|Laplacian\|`** | **0.997** |
+
+*(The ground truth was built by thresholding saturation — useful as a measuring
+stick, but deliberately **not** part of the algorithm, since it would defeat the
+whole point of being background agnostic.)*
+
+### Problem 2: max-across-channels amplifies chroma noise
+
+The first Laplacian version still lost the magenta half of the rectangle. That
+region turned out to be a *constant* colour, `[146,53,159]`, yet still measured
+11-13 against a threshold of 10.6 — chroma is subsampled in compressed video, so
+a saturated flat fill carries real chroma noise, and taking the **max** across
+BGR let that noise speak for the whole pixel.
+
+Averaging the channels instead lets it wash out, while staying sensitive to
+shapes that differ from the background in hue but not brightness:
+
+| Channel reduction | recall | false positives |
+|---|---|---|
+| max | 0.922 | 0.0017 |
+| **mean** | **0.997** | 0.0019 |
+| grayscale | 0.999 | 0.0021 |
+
+Grayscale scores marginally higher and is cheaper, but it is blind to a shape
+that differs from its background only in hue — precisely the case this part is
+about — so `mean` is the better trade.
+
+### Problem 3: refinement was destroying detections
+
+Swapping the metric made the grass clip *worse* (all-5 rate 60.3% -> 51.6%). The
+green trapezoid on green grass was being found, refined, and then thrown away:
+growing a green shape into green grass produced a ragged blob whose solidity
+fell to 0.841, just under the 0.85 gate. The refinement made the shape worse and
+the filter then killed it.
+
+Fixed with a rule that generalises the earlier anti-shrink guard: **refinement
+may only improve a blob.** If it shrinks the region or materially drops its
+solidity, keep the seed. Falling back costs a few pixels of inset; accepting a
+bad refinement costs the whole detection.
+
+### Results
+
+| Clip | Detection | End-to-end | Frames with all 5 shapes |
+|---|---|---|---|
+| Grass (Part 2) | 40.8 fps | 35.4 fps | 60.1% |
+| Asphalt + gradients (Part 3) | 41.3 fps | 35.8 fps | 59.9% |
+
+Both real-time against a 30.3 fps source. Frames showing fewer than 5 are mostly
+correct — shapes genuinely leave the frame as the camera pans.
+
+### Known limitations
+
+- **Low-contrast shapes keep a slightly inset outline.** The white trapezoid on
+  grey asphalt has no colour contrast to grow toward, so refinement declines and
+  the outline sits a few pixels inside the true edge. Detection and centre are
+  unaffected.
+- **Occlusion.** When shapes overlap, the visible region is not the shape, so the
+  polygon label and the centroid both shift. Addressed in Part 6 with tracking.
+
 ## Layout
 
 ```
