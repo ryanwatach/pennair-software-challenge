@@ -1,1 +1,0 @@
-/workspace/ros2_ws/build/pennair_vision_msgs/rosidl_generator_rs/pennair_vision_msgs/rust/src/msg.rs

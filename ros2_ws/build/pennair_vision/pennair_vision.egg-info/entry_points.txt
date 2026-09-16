@@ -1,3 +1,0 @@
-[console_scripts]
-detector_node = pennair_vision.detector_node:main
-video_publisher = pennair_vision.video_publisher:main

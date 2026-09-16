@@ -1,1 +1,0 @@
-ament_cmake_symlink_install_targets("TARGET_FILES" "/workspace/ros2_ws/build/pennair_vision_msgs/rosidl_generator_py/pennair_vision_msgs/pennair_vision_msgs_s__rosidl_typesupport_introspection_c.so" "TARGETS" "pennair_vision_msgs_s__rosidl_typesupport_introspection_c" "DESTINATION" "lib/python3.12/site-packages/pennair_vision_msgs")
